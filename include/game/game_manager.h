@@ -2,7 +2,6 @@
 
 #include <stdbool.h>
 
-// TODO: app/settings.h
 #include "app/settings.h"
 #include "game/game_state.h"
 

@@ -3,7 +3,6 @@
 #include <stdbool.h>
 
 #include "game/difficulty.h"
-// TODO: render/theme.h
 #include "render/theme.h"
 
 /**

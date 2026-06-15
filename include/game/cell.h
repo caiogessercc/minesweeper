@@ -4,9 +4,9 @@
 #include <stdint.h>
 
 /**
- * @brief Representa uma célula do tabuleiro do Minesweeper.
+ * @brief Representa uma célula do tabuleiro.
  *
- * @note include/cell.h
+ * @note include/game/cell.h
  */
 typedef struct {
   bool has_bomb;
