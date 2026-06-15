@@ -1,7 +1,10 @@
-#include <stddef.h>
+#pragma once
 
-#include "game/game_manager.h"
-#include "game/board.h"
+#include <stdbool.h>
+
+// TODO: app/settings.h
+#include "app/settings.h"
+#include "game/game_state.h"
 
 /**
  * @brief Cria uma nova partida.
@@ -15,16 +18,12 @@
  * @return true Se a criação foi concluída.
  * @return false Caso contrário.
  *
- * @note src/game/game_manager.c
+ * @note include/game/game_manager.h
  */
 bool game_manager_create(
   game_state_t *game,
   const settings_t *settings
-) {
-  if (game == NULL || settings == NULL) { return false; }
-  game->difficulty = settings->difficulty;
-  return board_initialize(game);
-}
+);
 
 /**
  * @brief Reinicia uma partida.
@@ -38,27 +37,20 @@ bool game_manager_create(
  * @return true Se a recriação foi concluída.
  * @return false Caso contrário.
  *
- * @note src/game/game_manager.c
+ * @note include/game/game_manager.h
  */
 bool game_manager_restart(
   game_state_t *game,
   const settings_t *settings
-) {
-  if (game == NULL || settings == NULL) { return false; }
-  board_destroy(game);
-  return game_manager_create(game, settings);
-}
+);
 
 /**
  * @brief Finaliza uma partida.
  *
  * @param game Estado da partida.
  *
- * @note src/game/game_manager.c
+ * @note include/game/game_manager.h
  */
 void game_manager_destroy(
   game_state_t *game
-) {
-  if (game == NULL) { return; }
-  board_destroy(game);
-}
+);
