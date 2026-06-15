@@ -182,9 +182,5 @@ make clean
 * sistema de recordes
 * salvamento de configurações
 * suporte a resoluções personalizadas
-* menu de configurações avançadas
+* menu de configurações
 * estatísticas de partidas
-* sistema de perfis
-* suporte a gamepad
-* internacionalização
-* testes automatizados
