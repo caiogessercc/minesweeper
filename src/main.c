@@ -1,154 +1,149 @@
-#include <stdio.h>
+#include <stdbool.h>
 
-#include "difficulty.h"
-#include "font.h"
-#include "game_manager.h"
-#include "hud.h"
-#include "input.h"
-#include "render.h"
-#include "timer.h"
-#include "window.h"
-#include "theme.h"
-#include "board.h"
-
-#define CELL_SIZE 32
-#define HUD_HEIGHT 120
-
-#define HUD_FONT_PATH "assets/fonts/Roboto-Regular.ttf"
-#define TITLE_FONT_PATH "assets/fonts/Roboto-Bold.ttf"
+#include "app/scene.h"
+#include "engine/graphics.h"
+#include "engine/input.h"
+#include "engine/timer.h"
+#include "game/game_manager.h"
+#include "game/board.h"
+#include "render/font.h"
+#include "render/menu.h"
+#include "render/render.h"
+#include "render/theme.h"
 
 /**
- * @brief Inicializa e executa o loop principal do jogo.
+ * @brief Configuração padrão da janela.
  *
- * Responsável por selecionar a dificuldade,
- * inicializar os subsistemas da aplicação,
- * processar entradas do usuário, atualizar o
- * estado da partida e renderizar os frames
- * até o encerramento do jogo.
+ * @note src/main.c
+ */
+static const graphics_config_t graphics_config = {
+  .title = "Minesweeper",
+  .width = 1280,
+  .height = 720,
+  .target_fps = 60,
+  .fullscreen = false,
+  .resizable = true
+};
+
+/**
+ * @brief Ponto de entrada da aplicação.
  *
- * @return 0 Se a execução foi concluída com sucesso.
- * @return 1 Se ocorreu falha durante a inicialização.
+ * Responsável por:
+ * - Inicializar subsistemas
+ * - Executar o loop principal
+ * - Gerenciar transições de estado
+ * - Encerrar recursos
+ *
+ * @return Código de saída.
  *
  * @note src/main.c
  */
 int main(void) {
-  difficulty_t difficulty = difficulty_select();
-  difficulty_config_t config = difficulty_get_config(difficulty);
-  theme_t theme = theme_get(THEME_CLASSIC);
-  game_state_t game = { 0 };
+  scene_t scene = { 0 };
+  scene_initialize(&scene);
 
-  if (!game_manager_create(&game, difficulty)) {
-    fprintf(stderr, "Failed to initialize board.\n");
-    return 1;
-  }
-
-  window_config_t window_config = {
-    .title = config.name,
-    .width = config.column_count * CELL_SIZE,
-    .height = (config.row_count * CELL_SIZE) + HUD_HEIGHT
-  };
-
-  window_t window = { 0 };
-
-  if (!window_initialize(&window, &window_config)) {
-    fprintf(stderr, "Failed to initialize window.\n");
-    game_manager_destroy(&game);
-    return 1;
-  }
-
+  if (!graphics_initialize(&graphics_config)) { return 1; }
   if (!font_initialize()) {
-    fprintf(stderr, "Failed to initialize SDL_ttf.\n");
-    window_destroy(&window);
-    game_manager_destroy(&game);
+    graphics_shutdown();
     return 1;
   }
 
-  font_t hud_font = { 0 };
-  font_t title_font = { 0 };
-
-  if (!font_load(&hud_font, HUD_FONT_PATH, 20)) { return 1; }
-  if (!font_load(&title_font, TITLE_FONT_PATH, 48)) { return 1; }
-
-  hud_t hud = { 0 };
-  hud_initialize(&hud, &hud_font, 10, 10);
   input_state_t input = { 0 };
   input_initialize(&input);
-  game_timer_t timer = { 0 };
+  timer_t timer = { 0 };
   timer_start(&timer);
+  bool game_created = false;
 
-  while(window_is_open(&window) && !input.quit_requested) {
-    input_poll_events(&input);
+  while (!graphics_should_close() && scene.state != APP_STATE_EXIT) {
+    graphics_update();
+    input_update(&input);
+    timer_update(&timer);
+    theme_t theme = theme_get(scene.settings.theme);
 
-    if (input.escape_pressed) { break; }
-    if (input.restart_requested) {
-      game_manager_restart(&game);
-      timer_reset(&timer);
-    }
+    switch (scene.state) {
+      case APP_STATE_MENU: {
+        menu_update(&scene, &input);
 
-    if (game.status == GAME_RUNNING) {
-      if (input.left_mouse_pressed) {
-        int row = (input.mouse_y - HUD_HEIGHT) / CELL_SIZE;
-        int column = input.mouse_x / CELL_SIZE;
-        board_reveal_cell(&game, row, column);
+        if (scene.state == APP_STATE_PLAYING) {
+          if (game_manager_create(&scene.game, &scene.settings)) {
+            timer_restart(&timer);
+            timer_start(&timer);
+            game_created = true;
+          } else {
+            scene.state = APP_STATE_MENU;
+          }
+        }
+        break;
       }
-      if (input.right_mouse_pressed) {
-        int row = (input.mouse_y - HUD_HEIGHT) / CELL_SIZE;
-        int column = input.mouse_x / CELL_SIZE;
-        board_toggle_flag(&game, row, column);
+
+      case APP_STATE_PLAYING: {
+        if (input.escape_pressed) {
+          game_manager_destroy(&scene.game);
+          game_created = false;
+          scene.state = APP_STATE_MENU;
+          break;
+        }
+
+        if (input.restart_requested) {
+          game_manager_restart(&scene.game, &scene.settings);
+          timer_restart(&timer);
+          timer_start(&timer);
+        }
+
+        if (scene.game.status == GAME_RUNNING) {
+          if (input.left_mouse_pressed) {
+            const int row = (input.mouse_y - 120) / 32;
+            const int column = input.mouse_x / 32;
+            board_reveal_cell(&scene.game, row, column);
+          }
+
+          if (input.right_mouse_pressed) {
+            const int row = (input.mouse_y - 120) / 32;
+            const int column = input.mouse_x / 32;
+            board_toggle_flag(&scene.game, row, column );
+          }
+        }
+        break;
       }
-    }
-
-    uint32_t elapsed_seconds = timer_get_elapsed_seconds(&timer);
-    int remaining_bombs = game.bomb_count - game.flag_count;
-    char title[128];
-
-    switch (game.status) {
-      case GAME_RUNNING:
-        snprintf(
-          title,
-          sizeof(title),
-          "%s | Bombs: %d | Time: %us",
-          difficulty_get_name(game.difficulty),
-          remaining_bombs,
-          elapsed_seconds
-        );
-        break;
-      case GAME_WON:
-        snprintf(
-          title,
-          sizeof(title),
-          "%s | Victory | Time: %us",
-          difficulty_get_name(game.difficulty),
-          elapsed_seconds
-        );
-        break;
-      case GAME_LOST:
-        snprintf(
-          title,
-          sizeof(title),
-          "%s | Game Over",
-          difficulty_get_name(game.difficulty)
-        );
+      case APP_STATE_EXIT:
+      default:
         break;
     }
 
-    window_set_title(&window, title);
-    window_clear(&window);
-    render_game(&window, &game, &theme);
-    render_hud(&window, &hud, &game, &timer, &theme);
+    graphics_begin_frame();
 
-    if (game.status == GAME_WON) { render_victory(&window, &title_font, &theme); }
-    if (game.status == GAME_LOST) { render_game_over(&window, &title_font, &theme); }
+    switch (scene.state) {
+      case APP_STATE_MENU:
+        menu_render(
+          &scene,
+          &input,
+          &theme
+        );
+        break;
+      case APP_STATE_PLAYING:
+        if (game_created) {
+          render_application(
+            &scene,
+            &timer,
+            &theme
+          );
+        }
+        break;
+      case APP_STATE_EXIT:
+      default:
+        break;
+    }
 
-    window_present(&window);
+    graphics_end_frame();
     input_clear(&input);
   }
 
-  font_unload(&title_font);
-  font_unload(&hud_font);
+  if (game_created) {
+    game_manager_destroy(&scene.game);
+  }
+
   font_destroy();
-  window_destroy(&window);
-  game_manager_destroy(&game);
+  graphics_shutdown();
 
   return 0;
 }
