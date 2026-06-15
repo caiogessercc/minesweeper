@@ -1,151 +1,144 @@
-#include "font.h"
+#include <stddef.h>
+#include "raylib.h"
+
+#include "render/font.h"
+
+#define FONT_PATH "assets/fonts/Roboto-Regular.ttf"
+
+static Font application_font = { 0 };
 
 /**
- * @brief Inicializa o subsistema SDL_ttf.
+ * @brief Converte color_t para Color.
  *
- * @return true Se a inicialização foi concluída com sucesso.
+ * @param color Cor abstrata.
+ *
+ * @return Cor Raylib.
+ *
+ * @note src/render/font.c
+ */
+static Color font_to_raylib_color(
+  color_t color
+) {
+  return (Color) {
+    .r = color.r,
+    .g = color.g,
+    .b = color.b,
+    .a = color.a
+  };
+}
+
+/**
+ * @brief Inicializa o sistema de fontes.
+ *
+ * @return true Se a inicialização foi concluída.
  * @return false Caso contrário.
  *
  * @note src/render/font.c
  */
-bool font_initialize(void) { return TTF_Init() == 0; }
-
-/**
- * @brief Finaliza o subsistema SDL_ttf.
- *
- * @note src/render/font.c
- */
-void font_destroy(void) { TTF_Quit(); }
-
-/**
- * @brief Carrega uma fonte a partir de um arquivo.
- *
- * @param font Estrutura da fonte.
- * @param path Caminho do arquivo .ttf.
- * @param size Tamanho da fonte em pixels.
- *
- * @return true Se a fonte foi carregada.
- * @return false Caso contrário.
- *
- * @note src/render/font.c
- */
-bool font_load(
-  font_t *font,
-  const char *path,
-  int32_t size
-) {
-  if (font == NULL || path == NULL) { return false; }
-  font->handle = TTF_OpenFont(path, size);
-  if (font->handle == NULL) { return false; }
-  font->size = size;
-  return true;
+bool font_initialize(void) {
+  application_font = LoadFontEx(FONT_PATH, 32, NULL, 0);
+  return application_font.texture.id != 0;
 }
 
 /**
- * @brief Libera uma fonte carregada.
- *
- * @param font Estrutura da fonte.
+ * @brief Finaliza o sistema de fontes.
  *
  * @note src/render/font.c
  */
-void font_unload(
-  font_t *font
-) {
-  if (font == NULL || font->handle == NULL) { return; }
-  TTF_CloseFont(font->handle);
-  font->handle = NULL;
-  font->size = 0;
+void font_destroy(void) {
+  if (application_font.texture.id == 0) { return; }
+  UnloadFont(application_font);
+  application_font = (Font){ 0 };
 }
 
 /**
- * @brief Renderiza um texto na tela.
+ * @brief Desenha um texto na tela.
  *
- * @param renderer Renderer SDL.
- * @param font Fonte utilizada.
- * @param text Texto a ser renderizado.
+ * @param text Texto a ser desenhado.
  * @param x Posição horizontal.
  * @param y Posição vertical.
+ * @param font_size Tamanho da fonte.
  * @param color Cor do texto.
  *
  * @note src/render/font.c
  */
 void font_draw_text(
-  SDL_Renderer *renderer,
-  const font_t *font,
   const char *text,
-  int32_t x,
-  int32_t y,
-  SDL_Color color
+  float x,
+  float y,
+  float font_size,
+  color_t color
 ) {
-  if (renderer == NULL || font == NULL || font->handle == NULL || text == NULL) { return; }
-  SDL_Surface *surface = TTF_RenderText_Blended(font->handle, text, color);
-  if (surface == NULL) { return; }
-  SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+  if (text == NULL) { return; }
+  if (application_font.texture.id == 0) { return; }
 
-  if (texture == NULL) {
-    SDL_FreeSurface(surface);
-    return;
-  }
-
-  SDL_Rect destination = {
-    .x = x,
-    .y = y,
-    .w = surface->w,
-    .h = surface->h
-  };
-
-  SDL_RenderCopy(
-    renderer,
-    texture,
-    NULL,
-    &destination
+  DrawTextEx(
+    application_font,
+    text,
+    (Vector2) {
+      .x = x,
+      .y = y
+    },
+    font_size,
+    1.0f,
+    font_to_raylib_color(color)
   );
+}
 
-  SDL_DestroyTexture(texture);
-  SDL_FreeSurface(surface);
+/**
+ * @brief Desenha um texto centralizado horizontalmente.
+ *
+ * @param text Texto a ser desenhado.
+ * @param y Posição vertical.
+ * @param font_size Tamanho da fonte.
+ * @param color Cor do texto.
+ *
+ * @note src/render/font.c
+ */
+void font_draw_text_centered(
+  const char *text,
+  float y,
+  float font_size,
+  color_t color
+) {
+  if (text == NULL) { return; }
+
+  float width = font_measure_text(text, font_size);
+  float x = (GetScreenWidth() - width) / 2.0f;
+
+  font_draw_text(
+    text,
+    x,
+    y,
+    font_size,
+    color
+  );
 }
 
 /**
  * @brief Obtém a largura de um texto.
  *
- * @param font Fonte utilizada.
- * @param text Texto analisado.
+ * @param text Texto.
+ * @param font_size Tamanho da fonte.
  *
  * @return Largura em pixels.
  *
  * @note src/render/font.c
  */
-int32_t font_get_text_width(
-  const font_t *font,
-  const char *text
+float font_measure_text(
+  const char *text,
+  float font_size
 ) {
-  if (font == NULL || font->handle == NULL || text == NULL) { return 0; }
+  if (text == NULL) { return 0.0f; }
+  if (application_font.texture.id == 0) { return 0.0f; }
 
-  int width = 0;
-  int height = 0;
+  Vector2 size =
+    MeasureTextEx(
+      application_font,
+      text,
+      font_size,
+      1.0f
+    );
 
-  TTF_SizeText(
-    font->handle,
-    text,
-    &width,
-    &height
-  );
-
-  return width;
-}
-
-/**
- * @brief Obtém a altura de um texto.
- *
- * @param font Fonte utilizada.
- *
- * @return Altura em pixels.
- *
- * @note src/render/font.c
- */
-int32_t font_get_text_height(
-  const font_t *font
-) {
-  if (font == NULL || font->handle == NULL) { return 0; }
-  return TTF_FontHeight(font->handle);
+  return size.x;
 }
